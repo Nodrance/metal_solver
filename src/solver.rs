@@ -23,7 +23,7 @@ impl SolveState {
         // add all metals reachable by deposition from the highest available metal. 
         // If the number of available metals was higher the way we do this would be inaccurate (ie a metal of tier 8 would split into 4,4 which cannot reach 3)
         // but since the highest tier is 6->3 and holes only start at 4+ we can just assume there's no holes)
-        if transitions.deposition 
+        if transitions.deposition //names
             && let Some(&max_available) = available_normal_metals.iter().max_by_key(|m| m.idx())
             && let Some((metal1, metal2)) = max_available.get_split_metals()
         {
@@ -36,7 +36,7 @@ impl SolveState {
         }
 
         // purification can reach any metal as long as low enough metals exist and costs no qs, so we put it early. Deposition goes first since it has "holes" and purification fills them.
-        if transitions.purification
+        if transitions.purification //names
             && let Some(&min_available) = available_normal_metals.iter().min_by_key(|m| m.idx())
         {
             for metal in Metal::normals() {
@@ -47,7 +47,7 @@ impl SolveState {
         }
 
         // rejection adds qs if there are higher metals available which is why purification is before it
-        if transitions.rejection
+        if transitions.rejection //names
             && let Some(&max_available) = available_normal_metals.iter().max_by_key(|m| m.idx())
         {
             for metal in Metal::normals() {
@@ -64,7 +64,7 @@ impl SolveState {
         // If you work out all the other relationships, you'll find that either order doesn't matter or this order works.
         // deposition and rejection or purification and projection can be done in any order
         // and projection and deposition need to be in that order so projection can fill in holes in the deposition tree.
-        if transitions.projection
+        if transitions.projection //names
             && quicksilver_available
             && let Some(&min_available) = available_normal_metals.iter().min_by_key(|m| m.idx())
         {
@@ -104,8 +104,11 @@ pub fn solve_lp(
     target: &SolveState,
     transitions: &AvailableTransitions
 ) -> Result<OptimalSolution, String> {
+    if !initial.can_theoretically_reach(target, transitions) {
+        return Err("Target state is not theoretically reachable with the given transitions".to_string());
+    }
     let mut vars = variables!();
-    let projection: [Variable; 5] = std::array::from_fn(|_| vars.add(variable().min(0.0)));
+    let projection: [Variable; 5] = std::array::from_fn(|_| vars.add(variable().min(0.0))); //names //four
     let rejection: [Variable; 5] = std::array::from_fn(|_| vars.add(variable().min(0.0)));
     let purification: [Variable; 5] = std::array::from_fn(|_| vars.add(variable().min(0.0)));
     let deposition: [Variable; 5] = std::array::from_fn(|_| vars.add(variable().min(0.0)));
@@ -192,7 +195,7 @@ pub fn solve_lp(
         return Err("Target must have at least one positive metal amount".to_string());
     }
 
-    if !transitions.projection {
+    if !transitions.projection { //names
         for var in &projection {
             model = model.with(constraint!(*var == 0.0));
         }
@@ -217,7 +220,7 @@ pub fn solve_lp(
         .solve()
         .map_err(|e| format!("Linear program failed to solve: {e}"))?;
 
-    let projection_values = std::array::from_fn(|idx| solution.value(projection[idx]));
+    let projection_values = std::array::from_fn(|idx| solution.value(projection[idx])); //names //four
     let rejection_values = std::array::from_fn(|idx| solution.value(rejection[idx]));
     let purification_values = std::array::from_fn(|idx| solution.value(purification[idx]));
     let deposition_values = std::array::from_fn(|idx| solution.value(deposition[idx]));

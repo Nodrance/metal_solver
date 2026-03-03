@@ -1,6 +1,7 @@
+
 use std::fmt::Debug;
 use crate::ui::CachedTextSizer;
-use macroquad::prelude::Texture2D;
+use macroquad::prelude::{Font, Texture2D};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -13,6 +14,7 @@ pub enum Metal {
     Silver = 5,
     Gold = 6,
 }
+#[allow(dead_code)]
 impl Metal {
     pub const COUNT: usize = 7;
 
@@ -91,7 +93,7 @@ impl Metal {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Transition {
-    Projection, // Uses one QS to raise a metal to the next level
+    Projection, // Uses one QS to raise a metal to the next level //names
     Rejection, // Lowers a metal and yields a QS
     Purification, // Turns two metals into one of the next level
     Deposition, // Splits a metal of tier N into two of tiers floor(N/2) and ceil(N/2)
@@ -99,7 +101,7 @@ pub enum Transition {
 
 #[derive(Clone, Copy)]
 pub struct AvailableTransitions {
-    pub projection: bool,
+    pub projection: bool, //names
     pub rejection: bool,
     pub purification: bool,
     pub deposition: bool,
@@ -108,7 +110,7 @@ pub struct AvailableTransitions {
 impl AvailableTransitions {
     pub fn get(&self, transition: Transition) -> bool {
         match transition {
-            Transition::Projection => self.projection,
+            Transition::Projection => self.projection, //names
             Transition::Rejection => self.rejection,
             Transition::Purification => self.purification,
             Transition::Deposition => self.deposition,
@@ -118,7 +120,7 @@ impl AvailableTransitions {
 
 impl std::fmt::Debug for AvailableTransitions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut transitions = Vec::new();
+        let mut transitions = Vec::new(); //names
         if self.projection {
             transitions.push("Pro");
         }
@@ -133,7 +135,7 @@ impl std::fmt::Debug for AvailableTransitions {
         }
         let output = match transitions.len() {
             0 => "None".to_string(),
-            4 => "All".to_string(),
+            4 => "All".to_string(), //four
             _ => transitions.join(", "),
         };
         write!(f, "[{}]", output)
@@ -176,7 +178,7 @@ impl SolveState {
 pub struct OptimalSolution {
     pub ratio: f64,
     pub outputs: [f64; Metal::COUNT],
-    pub projection: [f64; 5],
+    pub projection: [f64; 5], //names
     pub rejection: [f64; 5],
     pub purification: [f64; 5],
     pub deposition: [f64; 5],
@@ -197,7 +199,7 @@ impl Debug for OptimalSolution {
         }
         let mut potencies_string = "Transition potencies:\n".to_string();
 
-        for (transition_type, transition_values, metals_index_offset) in [
+        for (transition_type, transition_values, metals_index_offset) in [ //names //four
             ("Projection", &self.projection, 1),
             ("Rejection", &self.rejection, 2),
             ("Purification", &self.purification, 1),
@@ -217,22 +219,49 @@ impl Debug for OptimalSolution {
     }
 }
 
-pub fn format_rounded(value: f64, digits: usize) -> String {
-    if (value * 10.0).round() == (value * 10.0) {
-        format!("{:.1}", value)
-    } else {
-        format!("{:.1$}", value, digits)
+fn check_repeating(digits: &str, repeat_start: usize, repeat_length: usize) -> bool {
+    for i in 0..repeat_length {
+        let current_digit = digits.chars().nth(repeat_start + i).unwrap_or(' ');
+        for j in (repeat_start + repeat_length + i..digits.len()).step_by(repeat_length) {
+            if digits.chars().nth(j).unwrap_or(' ') != current_digit {
+                return false;
+            }
+        }
     }
+    true
+}
+
+pub fn format_rounded(value: f64, max_digits: usize) -> String {
+    if value.round() == value {
+        return format!("{:.0}", value);
+    }
+    let value_string = value.to_string();
+    let decimals = value_string.split('.').nth(1).unwrap_or("").chars().take(10).collect::<String>();
+    for repeat_length in 1..=decimals.len() / 2 {
+        for repeat_start in 0..repeat_length {
+            if check_repeating(&decimals, repeat_start, repeat_length) {
+                let length = (
+                    repeat_start + repeat_length.max(2)
+                    ).min(max_digits);
+                return format!("{:.1$}", value, length);
+            }
+        }
+    }
+    let decimals_to_show = decimals.len().min(max_digits);
+    format!("{:.1$}", value, decimals_to_show)
 }
 
 pub fn decimal_to_fraction(value: f64) -> String {
     let tolerance = 1e-6;
     let mut numerator = 1;
     let mut denominator = 1;
+    if value.round() == value {
+        return format!("{:.0}", value);
+    }
 
     while (numerator as f64 / denominator as f64 - value).abs() > tolerance {
         if numerator > 1000 || denominator > 1000 {
-            return format!("{:.5}", value);
+            return format_rounded(value, 5);
         }
         if (numerator as f64) / (denominator as f64) < value {
             numerator += 1;
@@ -240,12 +269,17 @@ pub fn decimal_to_fraction(value: f64) -> String {
             denominator += 1;
         }
     }
-
-    format!("{}/{}", numerator, denominator)
+    if denominator == 1 {
+        format!("{}", numerator)
+    } else {
+        format!("{}/{}", numerator, denominator)
+    }
 }
 
 pub struct UI {
     pub text_renderer: CachedTextSizer,
+    pub letter_font: Option<Font>,
+    pub number_font: Option<Font>,
     pub textures: Vec<Texture2D>,
     pub inputs: SolveState,
     pub target: SolveState,

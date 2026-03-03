@@ -1,20 +1,25 @@
+use macroquad::miniquad::conf::Icon;
 use macroquad::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::fs;
 use std::sync::Mutex;
 
 use crate::model::*;
 
-const IMAGE_FILES: [&str; Metal::COUNT] = [
-    "quicksilver_symbol.png",
-    "lead_symbol.png",
-    "tin_symbol.png",
-    "iron_symbol.png",
-    "copper_symbol.png",
-    "silver_symbol.png",
-    "gold_symbol.png",
+const IMAGE_BYTES: [&[u8]; Metal::COUNT] = [
+    include_bytes!("assets/quicksilver_symbol.png"),
+    include_bytes!("assets/lead_symbol.png"),
+    include_bytes!("assets/tin_symbol.png"),
+    include_bytes!("assets/iron_symbol.png"),
+    include_bytes!("assets/copper_symbol.png"),
+    include_bytes!("assets/silver_symbol.png"),
+    include_bytes!("assets/gold_symbol.png"),
 ];
 
-const METAL_LABELS: [&str; Metal::COUNT] = ["QS", "Pb", "Sn", "Fe", "Cu", "Ag", "Au"];
+const LETTER_FONT_BYTES: &[u8] = include_bytes!("assets/old_english.ttf");
+const NUMBER_FONT_BYTES: &[u8] = include_bytes!("assets/french_script.ttf");
+
+// const METAL_LABELS: [&str; Metal::COUNT] = ["QS", "Pb", "Sn", "Fe", "Cu", "Ag", "Au"];
 
 const DEFAULT_WINDOW_WIDTH: i32 = 1920;
 const DEFAULT_WINDOW_HEIGHT: i32 = 1080;
@@ -36,7 +41,7 @@ const ICON_ROW_HEIGHT_FACTOR: f32 = 0.9;
 const ICON_COL_WIDTH_FACTOR: f32 = 0.9;
 
 const TEXT_MARGIN_X: f32 = 0.15;
-const TEXT_MARGIN_Y: f32 = 0.05;
+const TEXT_MARGIN_Y: f32 = 0.2;
 
 const COLOR_BACKGROUND: Color = Color::new(0.08, 0.09, 0.12, 1.0);
 const COLOR_GRID_BG: Color = Color::new(0.11, 0.12, 0.15, 1.0);
@@ -44,39 +49,125 @@ const COLOR_OUTPUT_RATIO_BG: Color = Color::new(0.13, 0.16, 0.19, 1.0);
 const COLOR_OUTPUT_RATIO_BORDER: Color = Color::new(0.45, 0.55, 0.66, 1.0);
 const COLOR_OUTPUT_TEXT: Color = Color::new(0.78, 0.91, 0.92, 1.0);
 const COLOR_TRANSITION_TEXT: Color = Color::new(0.95, 0.91, 0.8, 1.0);
+const COLOR_DISABLED_ROW_OVERLAY: Color = Color::new(0.03, 0.03, 0.04, 0.6);
 
-const ROW_LABELS: [&str; 8] = [
+pub async fn display_loading_screen() {
+    clear_background(COLOR_BACKGROUND);
+    draw_text("Loading...", 100.0, 100.0, 30.0, COLOR_OUTPUT_TEXT);
+    next_frame().await;
+}
+
+const ROW_LABELS: [&str; 8] = [ //names //four
     "Metal",
     "Input",
-    "Requested",
     "Output",
+    "Solution",
     "Projection",
     "Rejection",
     "Purification",
     "Deposition",
 ];
 
-pub fn window_conf() -> Conf {
+const ICON_BIG: &[u8] = include_bytes!("assets/icon_big.tif");
+const ICON_MEDIUM: &[u8] = include_bytes!("assets/icon_medium.tif");
+const ICON_SMALL: &[u8] = include_bytes!("assets/icon_small.tif");
+
+fn tiff_rgba_to_array<const N: usize>(bytes: &[u8]) -> Option<[u8; N]> {
+    if bytes.len() < N + 8 {
+        return None;
+    }
+
+    let mut out = [0_u8; N];
+    out.copy_from_slice(&bytes[8..8 + N]);
+    Some(out)
+}
+
+fn embedded_icon() -> Icon {
+    Icon {
+        big: tiff_rgba_to_array::<16384>(ICON_BIG).unwrap(),
+        medium: tiff_rgba_to_array::<4096>(ICON_MEDIUM).unwrap(),
+        small: tiff_rgba_to_array::<1024>(ICON_SMALL).unwrap(),
+    }
+}
+
+pub fn window_conf() -> Conf {    
     Conf {
-        window_title: "Metal Solver".to_string(),
+        window_title: "Metal Ratio Solver".to_string(),
         window_width: DEFAULT_WINDOW_WIDTH,
         window_height: DEFAULT_WINDOW_HEIGHT,
         high_dpi: true,
         sample_count: DEFAULT_SAMPLE_COUNT,
+        icon: Some(embedded_icon()),
         ..Default::default()
     }
 }
 
 impl UI {
+    pub fn handle_click(&mut self, x: f32, y: f32) {
+        let total_grid_width = screen_width() - OUTER_MARGIN_X * 2.0;
+        let total_grid_height = screen_height() - OUTER_MARGIN_TOP - OUTER_MARGIN_BOTTOM;
+
+        if x < OUTER_MARGIN_X || x > OUTER_MARGIN_X + total_grid_width {
+            return;
+        }
+
+        if y < OUTER_MARGIN_TOP || y > OUTER_MARGIN_TOP + total_grid_height {
+            return;
+        }
+
+        let row_h = total_grid_height / ROW_LABELS.len() as f32;
+        let row_idx = ((y - OUTER_MARGIN_TOP) / row_h).floor() as usize;
+
+        let mut changed = true;
+        match row_idx {
+            4 => self.available_transitions.projection = !self.available_transitions.projection, //names //four
+            5 => self.available_transitions.rejection = !self.available_transitions.rejection,
+            6 => self.available_transitions.purification = !self.available_transitions.purification,
+            7 => self.available_transitions.deposition = !self.available_transitions.deposition,
+            _ => changed = false,
+        }
+
+        if changed {
+            self.solve();
+        }
+    }
+
+    fn transition_enabled(&self, row_idx: usize) -> bool {
+        match row_idx {
+            4 => self.available_transitions.projection, //names //four
+            5 => self.available_transitions.rejection,
+            6 => self.available_transitions.purification,
+            7 => self.available_transitions.deposition,
+            _ => true,
+        }
+    }
+
+    pub async fn load_font(&mut self) {
+        if let Ok(font) = load_ttf_font_from_bytes(LETTER_FONT_BYTES) {
+            self.letter_font = Some(font);
+            println!("Loaded embedded letter font");
+        }
+
+        if let Ok(font) = load_ttf_font_from_bytes(NUMBER_FONT_BYTES) {
+            self.number_font = Some(font);
+            println!("Loaded embedded number font");
+        }
+
+        if self.letter_font.is_none() {
+            println!("Failed to load embedded letter font; using Macroquad default font for labels.");
+        }
+        if self.number_font.is_none() {
+            println!("Failed to load embedded number font; using Macroquad default font for numbers.");
+        }
+    }
+
     pub async fn load_textures(&mut self) {
         let mut textures: [Option<Texture2D>; Metal::COUNT] = std::array::from_fn(|_| None);
 
             for idx in 0..Metal::COUNT {
-                let path = format!("src/sprites/{}", IMAGE_FILES[idx]);
-                if let Ok(texture) = load_texture(&path).await {
-                    texture.set_filter(FilterMode::Linear);
-                    textures[idx] = Some(texture);
-                }
+                let texture = Texture2D::from_file_with_format(IMAGE_BYTES[idx], None);
+                texture.set_filter(FilterMode::Linear);
+                textures[idx] = Some(texture);
             }
             self.textures = textures.iter().filter_map(|t| t.clone()).collect();
     }
@@ -99,11 +190,11 @@ impl UI {
 
     fn transition_value(&self, solution: &Option<OptimalSolution>, row_idx: usize, metal_idx: usize) -> String {
         let Some(solution) = solution else {
-            return "-".to_string();
+            return "/".to_string();
         };
 
         let value = match row_idx {
-            4 if (1..=5).contains(&metal_idx) => Some(solution.projection[metal_idx - 1]),
+            4 if (1..=5).contains(&metal_idx) => Some(solution.projection[metal_idx - 1]), //names //four
             5 if (2..=6).contains(&metal_idx) => Some(solution.rejection[metal_idx - 2]),
             6 if (1..=5).contains(&metal_idx) => Some(solution.purification[metal_idx - 1]),
             7 if (2..=6).contains(&metal_idx) => Some(solution.deposition[metal_idx - 2]),
@@ -113,20 +204,49 @@ impl UI {
         value.map(|v| self.format_fraction(v)).unwrap_or_else(|| "".to_string())
     }
 
-    fn draw_text_in_rect(&self, text: &str, x: f32, y: f32, w: f32, h: f32, color: Color) {
+    fn draw_text_in_rect(&self, text: &str, rect: Rect, color: Color, font_kind: FontKind) {
         if text.is_empty() {
             return;
         }
-        let w = (1.0 - (2.0 * TEXT_MARGIN_X)) * w;
-        let h = (1.0 - (2.0 * TEXT_MARGIN_Y)) * h;
-        let x = x + w * TEXT_MARGIN_X;
-        let y = y + h * TEXT_MARGIN_Y;
+        let x = rect.x + (rect.w * TEXT_MARGIN_X);
+        let y = rect.y + (rect.h * TEXT_MARGIN_Y);
+        let w = (1.0 - (2.0 * TEXT_MARGIN_X)) * rect.w;
+        let h = (1.0 - (2.0 * TEXT_MARGIN_Y)) * rect.h;
 
-        let (optimal_size, offset_x, offset_y) = self.text_renderer.get_text_max_size(text, w, h);
-        draw_text(text, x + offset_x, y + offset_y, optimal_size, color);
+        let (optimal_size, offset_x, offset_y) = self
+            .text_renderer
+            .get_text_max_size(text, w, h, self.get_font(font_kind), font_kind);
+        draw_text_ex(
+            text,
+            x + offset_x,
+            y + offset_y,
+            TextParams {
+                font: self.get_font(font_kind),
+                font_size: optimal_size.max(1.0).round() as u16,
+                color,
+                ..Default::default()
+            },
+        );
+    }
+
+    fn draw_label_text_in_rect(&self, text: &str, rect: Rect, color: Color) {
+        self.draw_text_in_rect(text, rect, color, FontKind::Letters);
+    }
+
+    fn draw_number_text_in_rect(&self, text: &str, rect: Rect, color: Color) {
+        self.draw_text_in_rect(text, rect, color, FontKind::Numbers);
+    }
+
+    fn get_font(&self, font_kind: FontKind) -> Option<&Font> {
+        match font_kind {
+            FontKind::Letters => self.letter_font.as_ref(),
+            FontKind::Numbers => self.number_font.as_ref(),
+        }
     }
 
     pub fn draw(&self) {
+        clear_background(COLOR_BACKGROUND);
+
         let total_grid_width = screen_width() - OUTER_MARGIN_X * 2.0;
         let total_grid_height = screen_height() - OUTER_MARGIN_TOP - OUTER_MARGIN_BOTTOM;
 
@@ -144,12 +264,14 @@ impl UI {
 
         for (row_idx, row_label) in ROW_LABELS.iter().enumerate() {
             let y = OUTER_MARGIN_TOP + row_idx as f32 * row_h;
+            let label_rect = Rect::new(OUTER_MARGIN_X, y, LABEL_COLUMN_WIDTH, row_h);
 
             draw_rectangle_lines(OUTER_MARGIN_X, y, LABEL_COLUMN_WIDTH, row_h, GRID_LABEL_BORDER_THICKNESS, GRAY);
-            self.draw_text_in_rect(row_label, OUTER_MARGIN_X, y, LABEL_COLUMN_WIDTH, row_h, WHITE);
+            self.draw_label_text_in_rect(row_label, label_rect, WHITE);
 
             for metal_idx in 0..Metal::COUNT {
                 let x = OUTER_MARGIN_X + LABEL_COLUMN_WIDTH + metal_idx as f32 * cell_w;
+                let cell_rect = Rect::new(x, y, cell_w, row_h);
                 draw_rectangle_lines(x, y, cell_w, row_h, GRID_CELL_BORDER_THICKNESS, DARKGRAY);
 
                 match row_idx {
@@ -168,26 +290,36 @@ impl UI {
                     }
                     1 => {
                         let value = self.inputs.get(Metal::from(metal_idx));
-                        self.draw_text_in_rect(&self.format_integer(value), x, y, cell_w, row_h, WHITE);
+                        self.draw_number_text_in_rect(&self.format_integer(value), cell_rect, WHITE);
                     }
                     2 => {
                         let value = self.target.get(Metal::from(metal_idx));
-                        self.draw_text_in_rect(&self.format_integer(value), x, y, cell_w, row_h, WHITE);
+                        self.draw_number_text_in_rect(&self.format_integer(value), cell_rect, WHITE);
                     }
                     3 => {
                         let text = if let Some(solution) = &self.solution {
                             self.format_fraction(solution.outputs[metal_idx])
                         } else {
-                            "-".to_string()
+                            "/".to_string()
                         };
-                        self.draw_text_in_rect(&text, x, y, cell_w, row_h, COLOR_OUTPUT_TEXT);
+                        self.draw_number_text_in_rect(&text, cell_rect, COLOR_OUTPUT_TEXT);
                     }
-                    4..=7 => {
+                    4..=7 => { //four
                         let text = self.transition_value(&self.solution, row_idx, metal_idx);
-                        self.draw_text_in_rect(&text, x, y, cell_w, row_h, COLOR_TRANSITION_TEXT);
+                        self.draw_number_text_in_rect(&text, cell_rect, COLOR_TRANSITION_TEXT);
                     }
                     _ => {}
                 }
+            }
+
+            if (4..=7).contains(&row_idx) && !self.transition_enabled(row_idx) { //four
+                draw_rectangle(
+                    OUTER_MARGIN_X,
+                    y,
+                    total_grid_width,
+                    row_h,
+                    COLOR_DISABLED_ROW_OVERLAY,
+                );
             }
         }
 
@@ -201,13 +333,27 @@ impl UI {
         );
         draw_rectangle_lines(OUTER_MARGIN_X, ratio_box_y, total_grid_width, OUTPUT_RATIO_HEIGHT, OUTPUT_RATIO_BORDER_THICKNESS, COLOR_OUTPUT_RATIO_BORDER);
 
-        let ratio_text = if let Some(solution) = &self.solution {
-            format!("Total Ratio Achieved: {}", format_rounded(solution.ratio, 8))
+        let ratio_label_x = OUTER_MARGIN_X;
+        let ratio_label_w = total_grid_width * 0.56;
+        let ratio_label_rect = Rect::new(ratio_label_x, ratio_box_y, ratio_label_w, OUTPUT_RATIO_HEIGHT);
+        self.draw_label_text_in_rect("Total Ratio Achieved:", ratio_label_rect, WHITE);
+
+        let ratio_value_text = if let Some(solution) = &self.solution {
+            format_rounded(solution.ratio, 8)
         } else {
-            "Total Ratio Achieved: N/A".to_string()
+            "N/A".to_string()
         };
-        self.draw_text_in_rect(&ratio_text, OUTER_MARGIN_X, ratio_box_y, total_grid_width, OUTPUT_RATIO_HEIGHT, WHITE);
+        let ratio_value_x = OUTER_MARGIN_X + total_grid_width * 0.56;
+        let ratio_value_w = total_grid_width * 0.42;
+        let ratio_value_rect = Rect::new(ratio_value_x, ratio_box_y, ratio_value_w, OUTPUT_RATIO_HEIGHT);
+        self.draw_number_text_in_rect(&ratio_value_text, ratio_value_rect, WHITE);
     }
+}
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+enum FontKind {
+    Letters,
+    Numbers,
 }
 
 #[derive(Hash, PartialEq, Eq, Clone, Debug)]
@@ -215,11 +361,12 @@ struct TextCacheKey {
     text: String,
     w_px: u16,
     h_px: u16,
+    font_kind: FontKind,
 }
 type TextMaxSize = (f32, f32, f32);
 pub struct CachedTextSizer {
     final_size_cache: Mutex<HashMap<TextCacheKey, TextMaxSize>>,
-    unscaled_size_cache: Mutex<HashMap<String, (f32, f32)>>,
+    unscaled_size_cache: Mutex<HashMap<(String, FontKind), (f32, f32)>>,
 }
 
 impl CachedTextSizer {
@@ -230,7 +377,7 @@ impl CachedTextSizer {
         }
     }
 
-    pub fn get_text_max_size(&self, text: &str, rect_width: f32, rect_height: f32) -> TextMaxSize {
+    fn get_text_max_size(&self, text: &str, rect_width: f32, rect_height: f32, font: Option<&Font>, font_kind: FontKind) -> TextMaxSize {
         let w_px = rect_width.round().clamp(0.0, u16::MAX as f32) as u16;
         let h_px = rect_height.round().clamp(0.0, u16::MAX as f32) as u16;
 
@@ -238,6 +385,7 @@ impl CachedTextSizer {
             text: text.to_string(),
             w_px,
             h_px,
+            font_kind,
         };
 
         if let Ok(cache) = self.final_size_cache.lock()
@@ -246,28 +394,29 @@ impl CachedTextSizer {
             return *cached_size;
         }
 
-        let text_size = self.measure(text, rect_width, rect_height);
+        let text_size = self.measure(text, rect_width, rect_height, font, font_kind);
         if let Ok(mut cache) = self.final_size_cache.lock() {
             cache.insert(key, text_size);
         }
         text_size
     }
 
-    fn measure(&self, text: &str, rect_width: f32, rect_height: f32) -> TextMaxSize {
+    fn measure(&self, text: &str, rect_width: f32, rect_height: f32, font: Option<&Font>, font_kind: FontKind) -> TextMaxSize {
         let reference_size = 100u16;
+        let text_key = (text.to_string(), font_kind);
 
         let (size_x, size_y) = if let Ok(cache) = self.unscaled_size_cache.lock()
-            && let Some(dimensions) = cache.get(text)
+            && let Some(dimensions) = cache.get(&text_key)
         {
             (dimensions.0, dimensions.1)
         }
         else {
-            let dimensions = measure_text(text, None, reference_size, 1.0);
+            let dimensions = measure_text(text, font, reference_size, 1.0);
             let size_x = dimensions.width;
             let size_y = dimensions.height;
 
             if let Ok(mut cache) = self.unscaled_size_cache.lock() {
-                cache.insert(text.to_string(), (size_x, size_y));
+                cache.insert(text_key, (size_x, size_y));
             }
             (size_x, size_y)
         };
