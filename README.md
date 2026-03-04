@@ -1,13 +1,13 @@
 # Metal Solver
 ![Screenshot](screenshot.png)
 ## What is this?
-It solves rate problems with metals in Opus Magnum. It supports all 4 vanilla + DLC transmutations and the code can easily be modified to support modded metals or transmutations. Rate means the speed at which you make outputs, regardless of how long it takes you to set up. This means you'll always be taking out atoms as fast as possible, and making them into products as efficiently as possible. This solver tells you the most efficient way to do it.
+This is Metal Rate Solver. Yes, I'm bad at naming things. It solves rate/throughput problems with metals in Opus Magnum. You give it the inputs and outputs of a puzzle, and it tells you what transmutations to do to maximize the rate. Rate means the speed at which you make outputs, regardless of how long it takes you to set up. It supports all 4 vanilla + DLC transmutations and the code can easily be modified to support modded metals or transmutations. 
 ## How do I use it?
 Just click on any of the light blue areas. The input and target rows describe how much of that atom you have as your input/output, and clicking the transmutations toggles whether each one is allowed. 
 The numbers below represent how many times to use each transmutation on each atom. For example if the number under gold and deposition is 3/2, that means that every time you take out 2 sets of gold atoms, you should use deposition on 3 single gold atoms. Ratios can be higher than 1 if you have multiple atoms in your input set.
 The big box at the bottom tells you your final optimal ratio of input to output.
 ## How do I download it?
-Just download metal_solver.exe from the repo. I have no idea how to do releases yet but I'll probably get on that eventually. Click on that to download it, then run it. You don't need to install anything else to run it, and it won't mess with any of your Opus Magnum files or anything like that.
+Just download metal_solver.exe from the repo. I have no idea how to do releases yet but I'll probably get on that eventually. You'll need to download it, then run it. You don't need to install anything else to run it, and it won't mess with any of your Opus Magnum files or anything like that.
 ## Is this a virus?
 If you see a popup saying "Windows protected your PC" or something like that, it doesn't mean this is a virus. It just means that the program was built by me, and Windows doesn't know who I am and doesn't trust me. If you trust me, you can click "Learn more" and "Run anyway". If you don't trust me either (I am a stranger on the internet after all), you can read through the code to look for anything suspicious, then compile it yourself by following the instructions below.
 ## How do I compile it myself?
