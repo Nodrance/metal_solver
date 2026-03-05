@@ -133,6 +133,7 @@ pub fn solve_lp(
     let r = transition_vars(Transition::Rejection);
     let pu = transition_vars(Transition::Purification);
     let d = transition_vars(Transition::Deposition);
+    let pf = transition_vars(Transition::Proliferation);
     // let a = transition_vars(Transition::Antiquation); //antiquation
 
     // p[1] is the number of times projection is used on lead (ID 1), p[2] on tin (ID 2), etc. Same for the other transitions.
@@ -180,6 +181,16 @@ pub fn solve_lp(
         - d[6],
     ];
 
+    let proliferation_terms: [Expression; Metal::COUNT] = [
+        - pf[1] - pf[2] - pf[3] - pf[4] - pf[5] - pf[6], // consume quicksilver
+        pf[1].into(), //produce metals at a 1:1 ratio
+        pf[2].into(),
+        pf[3].into(),
+        pf[4].into(),
+        pf[5].into(),
+        pf[6].into(),
+    ];
+
     
     // Example for Antiquation. The equations are set up so that anything you use it on (including quicksilver) turns into lead, and lead turns into quicksilver
     /*
@@ -205,6 +216,7 @@ pub fn solve_lp(
             + rejection_terms[idx].clone() 
             + purification_terms[idx].clone() 
             + deposition_terms[idx].clone()
+            + proliferation_terms[idx].clone()
             // + antiquation_terms[idx].clone() // just add the new terms in the same way as the others
         ;
         output_expressions.push(output);
@@ -240,6 +252,9 @@ pub fn solve_lp(
             }
         }
     }
+
+    // proliferation can only proc every 3 cycles
+    model = model.with(constraint!(proliferation_terms[0].clone() >= -2.0/3.0));
 
     let solution = model
         .solve()
