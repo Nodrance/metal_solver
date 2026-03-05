@@ -16,8 +16,8 @@ const IMAGE_BYTES: [&[u8]; Metal::COUNT] = [
     include_bytes!("assets/gold_symbol.png"),
 ];
 
-const LETTER_FONT_BYTES: &[u8] = include_bytes!("assets/Lato-Regular.ttf");
-const NUMBER_FONT_BYTES: &[u8] = include_bytes!("assets/Lato-Regular.ttf");
+const LETTER_FONT_BYTES: &[u8] = include_bytes!("assets/old_english.ttf");
+const NUMBER_FONT_BYTES: &[u8] = include_bytes!("assets/french_script.ttf");
 
 const ICON_BIG: &[u8] = include_bytes!("assets/icon_big.tif");
 const ICON_MEDIUM: &[u8] = include_bytes!("assets/icon_medium.tif");
