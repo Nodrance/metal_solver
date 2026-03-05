@@ -4,17 +4,13 @@ use std::env;
 
 enum OutputMode {
     Human,
-    Json,
-}
-
-struct JsonOptions {
-    use_names: bool,
-    pretty_values: bool,
+    Json { use_names: bool, pretty_values: bool },
+    NoSpoilers,
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let (mode, json_options, positional) = parse_args(&args);
+    let (mode, positional) = parse_args(&args);
     if positional.len() != 3 {
         print_usage(&args[0]);
         std::process::exit(2);
@@ -45,11 +41,12 @@ fn main() {
     match solve_lp(&initial_state, &target_state, &available_transitions) {
         Ok(solution) => match mode {
             OutputMode::Human => println!("{solution:?}"),
-            OutputMode::Json => println!("{}", solution.to_json_string(json_options.use_names, json_options.pretty_values)),
+            OutputMode::Json { use_names, pretty_values } => println!("{}", solution.to_json_string(use_names, pretty_values)),
+            OutputMode::NoSpoilers => println!("Final ratio: {}", solution.ratio),
         },
         Err(err) => match mode {
-            OutputMode::Human => eprintln!("Solve failed: {err}"),
-            OutputMode::Json => {
+            OutputMode::Human | OutputMode::NoSpoilers => eprintln!("Solve failed: {err}"),
+            OutputMode::Json { .. } => {
                 eprintln!("{{\"error\":\"{}\"}}", escape_json_string(&err));
                 std::process::exit(1);
             }
@@ -57,24 +54,45 @@ fn main() {
     }
 }
 
-fn parse_args(args: &[String]) -> (OutputMode, JsonOptions, Vec<String>) {
-    let mut mode = OutputMode::Json;
-    let mut use_names = false;
-    let mut pretty_values = false;
+fn parse_args(args: &[String]) -> (OutputMode, Vec<String>) {
+    let mut mode = OutputMode::Json { use_names: false, pretty_values: false };
     let mut positional = Vec::new();
     for arg in args.iter().skip(1) {
-        // match arg.as_str() {
-        //     "-h" => mode = OutputMode::Human,
-        //     "-n" => use_names = true,
-        //     "-p" => pretty_values = true,
-        //     _ => positional.push(arg.clone()),
-        // }
-        if arg.starts_with("-") {
+        if arg.starts_with("--") {
+            match arg.as_str() {
+                "--human" => mode = OutputMode::Human,
+                "--use-names" => {
+                    if let OutputMode::Json { use_names, .. } = &mut mode {
+                        *use_names = true;
+                    }
+                }
+                "--pretty-values" => {
+                    if let OutputMode::Json { pretty_values, .. } = &mut mode {
+                        *pretty_values = true;
+                    }
+                }
+                "--no-spoilers" => mode = OutputMode::NoSpoilers,
+                _ => {
+                    eprintln!("Unknown option: {arg}");
+                    print_usage(&args[0]);
+                    std::process::exit(2);
+                }
+            }
+        } else if arg.starts_with("-") {
             for ch in arg.chars().skip(1) {
                 match ch {
                     'h' => mode = OutputMode::Human,
-                    'n' => use_names = true,
-                    'p' => pretty_values = true,
+                    'n' => {
+                        if let OutputMode::Json { use_names, .. } = &mut mode {
+                            *use_names = true;
+                        }
+                    }
+                    'p' => {
+                        if let OutputMode::Json { pretty_values, .. } = &mut mode {
+                            *pretty_values = true;
+                        }
+                    }
+                    's' => mode = OutputMode::NoSpoilers,
                     _ => {
                         eprintln!("Unknown option: -{ch}");
                         print_usage(&args[0]);
@@ -88,17 +106,20 @@ fn parse_args(args: &[String]) -> (OutputMode, JsonOptions, Vec<String>) {
     }
     (
         mode,
-        JsonOptions {
-            use_names,
-            pretty_values,
-        },
         positional,
     )
 }
 
 fn print_usage(program: &str) {
-    eprintln!("Usage: {program} [-h] [-n] [-p] <inputs> <outputs> <transitions>");
-    eprintln!("Example (json): {program} \"2 2 0 0 0 0 0\" \"0 2 0 1 0 0 0\" \"1 0 0 1\"");
-    eprintln!("Example (human): {program} -h \"2 2 0 0 0 0 0\" \"0 2 0 1 0 0 0\" \"1 0 0 1\"");
+    eprintln!("Usage: {program} <inputs> <outputs> <transitions>");
+    eprintln!("Example (json with names and pretty values): {program} \"2 2 0 0 0 0 0\" \"0 2 0 1 0 0 0\" \"1 0 0 1\" -np");
+    eprintln!("Almost any format you can imagine is supported for the inputs, outputs, and transitions");
+    eprintln!("This includes json objects with metals as keys or a list of transitions, or a simple space or comma separated list of number or true/false values");
+    eprintln!("Options:");
+    eprintln!("  --human, -h: Human-optimized output (default is JSON)");
+    eprintln!("  --use-names, -n: Use metal and transition names in JSON output instead of indices. Overriden by -h and -s");
+    eprintln!("  --pretty-values, -p: Format values in JSON output as fractions. Overriden by -h and -s");
+    eprintln!("  --no-spoilers, -s: Only output the final best possible ratio, with no details about the solution steps.");
 }
+
 

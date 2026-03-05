@@ -1,5 +1,5 @@
-
 use std::fmt::Debug;
+use regex::Regex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -128,6 +128,12 @@ impl Metal {
             Metal::Gold => "Gold",
         }
     }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        let name = name.to_ascii_lowercase();
+        Self::all().iter().find(|m| m.name().to_ascii_lowercase() == name).copied()
+    }
+
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -157,6 +163,11 @@ impl Transition {
             // 4 => Transition::Antiquation,
             _ => panic!("Invalid transition index"),
         }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        let name = name.to_ascii_lowercase();
+        Self::all().iter().find(|t| t.name().to_ascii_lowercase() == name || t.short_name().to_ascii_lowercase() == name).copied()
     }
     
     pub const fn all() -> [Self; Self::COUNT] {
@@ -218,40 +229,54 @@ impl AvailableTransitions {
         self.transitions[transition as usize] = value;
     }
 
-    fn from_names(input: &str) -> Result<Self, String> {
-        if input == "All" {
-            return Ok(AvailableTransitions { transitions: [true; Transition::COUNT] });
-        } else if input == "None" {
-            return Ok(AvailableTransitions { transitions: [false; Transition::COUNT] });
-        }
-        let mut transitions = [false; Transition::COUNT];
-        let long_names = Transition::all().map(|t| t.name());
-        let short_names = Transition::all().map(|t| t.short_name());
-        for part in input.split_whitespace() {
-            let transition = long_names.iter().chain(short_names.iter()).position(|&name| name == part)
-                .ok_or_else(|| format!("Invalid transition name: {}", part))?;
-            transitions[transition] = true;
-        }
-        Ok(AvailableTransitions { transitions })
-    }
-
-    fn from_bool_string(input: &str) -> Result<Self, String> {
-        let mut transitions = [false; Transition::COUNT];
-        for (i, part) in input.split_whitespace().enumerate() {
-            if i >= Transition::COUNT {
-                return Err(format!("Too many values for transitions: expected {}, got {}", Transition::COUNT, i + 1));
-            }
-            match part.to_ascii_lowercase().as_str() {
-                "1" | "y" | "true"=> transitions[i] = true,
-                "0" | "n" | "false" => transitions[i] = false,
-                _ => return Err(format!("Invalid value for transition {}: {}", i, part)),
-            }
-        }
-        Ok(AvailableTransitions { transitions })
-    }
-
     pub fn from_input(input: &str) -> Result<Self, String> {
-        Self::from_bool_string(input).or_else(|_| Self::from_names(input))
+        // supported input formats:
+        // "1011" (values in order)
+        // "t y true yes" (any combination of boolean words) 
+        // "truefalse,nono" (no spaces needed, other spacers optional)
+        // "Depositionprojection" (named transitions in any order with or without spaces, also accepts short names like "Pro, Dep")
+        // "all" or "none" (cannot be combined with anything else, sets all transitions on or off respectively)
+        // "0001 proj rej" (each name adds a transition. If you include any values you must either include all four, or the exact number needed in addition to the names)
+        // "10 rej pur" means projection is on from the values, rejection and purification are on because of the names, and deposition is off
+        let mut sanitized = input.to_ascii_lowercase().chars()
+        .filter(|c| c.is_ascii_alphanumeric()).collect::<String>();
+
+        if sanitized == "all" {
+            return Ok(Self { transitions: [true; Transition::COUNT] });
+        }
+        if sanitized == "none" {
+            return Ok(Self { transitions: [false; Transition::COUNT] });
+        }
+
+        let mut transitions = [false; Transition::COUNT];
+
+        for transition in Transition::all() {
+            let name = transition.name().to_ascii_lowercase();
+            let short_name = transition.short_name().to_ascii_lowercase();
+            if sanitized.contains(&name) {
+                transitions[transition.idx()] = true;
+                sanitized = sanitized.replace(&name, "");
+            } else if sanitized.contains(&short_name) {
+                transitions[transition.idx()] = true;
+                sanitized = sanitized.replace(&short_name, "");
+            }
+        }
+        let re = Regex::new(r"(true|t|yes|y|1)").unwrap();
+        sanitized = re.replace_all(&sanitized, "1").to_string();
+        let re = Regex::new(r"(false|f|no|n|0)").unwrap();
+        sanitized = re.replace_all(&sanitized, "0").to_string();
+        if !sanitized.chars().all(|c| c == '0' || c == '1') {
+            return Err(format!("Invalid alphabetical characters in input. Only 0, 1, true, false, yes, no, t, f, y, n, and transition short or long names are allowed.\n Additional characters: {}", sanitized));
+        }
+        let named_count = transitions.iter().filter(|&&x| x).count();
+        let value_count = sanitized.len();
+        if value_count > 0 && value_count != Transition::COUNT && (value_count + named_count != Transition::COUNT) {
+            return Err(format!("If you include any 0/1 values, you must include either all {} values or exactly the number of values needed to supplement the names you included. Found {} values and {} names.", Transition::COUNT, value_count, named_count));
+        }
+        for (i, c) in sanitized.chars().enumerate() {
+            transitions[i] = transitions[i] || c == '1';
+        }
+        Ok(Self { transitions })
     }
 }
 
@@ -290,14 +315,67 @@ impl std::fmt::Debug for SolveState {
 
 impl SolveState {
     pub fn from_input(input: &str) -> Result<Self, String> {
-        let parts: Vec<&str> = input.split_whitespace().collect();
-        if parts.len() != Metal::COUNT {
-            return Err(format!("Expected {} values for metals, got {}", Metal::COUNT, parts.len()));
-        }
-        let mut metals = [0.0; Metal::COUNT];
-        for (i, part) in parts.iter().enumerate() {
-            metals[i] = part.parse::<f64>().map_err(|e| format!("Failed to parse metal count '{}': {}", part, e))?;
-        }
+        // supported input formats:
+        // "1.5 2 3 4 5 6 7" (space-separated values in order of metals)
+        // "Quicksilver: 1.5, Lead: 2, Tin: 3, Iron: 4, Copper: 5, Silver: 6, Gold: 7" (named values, order doesn't matter)
+        // [1.5,2,3,4,5,6,7] (JSON array)
+        // {"Quicksilver": 1.5, "Lead": 2, "Tin": 3, "Iron": 4, "Copper": 5, "Silver": 6, "Gold": 7} (JSON object)
+        // ["1.5","2","3","4","5","6","7"] (JSON array of strings)
+        // {"Quicksilver": "1.5", "Lead": "2", "Tin": "3", "Iron": "4", "Copper": "5", "Silver": "6", "Gold": "7"} (JSON object with string values)
+        // technical rules for parsing:
+        // - step 1: remove anything that isn't a letter, number, comma, period, or space, and lowercase everything
+        // - step 2: replace any sequence of whitespace or commas with a single space, and trim leading/trailing whitespace
+        // - step 3: anytime we see the name of a metal followed by a number, we assign that number to the metal. 
+        // - step 4: any remaining numbers get assigned to the next unassigned metal
+        // this means that for example `  iROn##4,,, 1 2, 3 5, 6gold = "7"` would be parsed as Iron=4, Quicksilver=1, Lead=2, Tin=3, Copper=5, Silver=6, Gold=7
+        
+        let mut metals = [-1.0; Metal::COUNT];
+        // `  iROn##4,,, 1 2, 3 5, 6gold = "7"`
+        let mut sanitized = input.to_ascii_lowercase();
+        // `  iron##4,,, 1 2, 3 5, 6gold = "7"`
+        sanitized = sanitized.chars().filter(|c| c.is_ascii_alphanumeric() || *c == ',' || *c == '.' || *c == '-' || c.is_whitespace()).collect();
+        // `  iron4,,, 1 2, 3 5, 6gold 7`
+        let re = Regex::new(r"([a-zA-Z])(-?\d)").unwrap();
+        sanitized = re.replace_all(&sanitized, "$1 $2").to_string(); 
+        // `  iron 4,,, 1 2, 3 5, 6gold 7`
+        let re = Regex::new(r"(\d)([a-zA-Z])").unwrap();
+        sanitized = re.replace_all(&sanitized, "$1 $2").to_string();
+        // `  iron 4,,, 1 2, 3 5, 6 gold 7`
+        let re = Regex::new(r"[,\s]+").unwrap();
+        sanitized = re.replace_all(&sanitized, " ").trim().to_string();
+        // `iron 4 1 2 3 5 6 gold 7`
+
+        let parts: Vec<&str> = sanitized.split_whitespace().collect();
+        let mut assign_metal = None;
+        for part in parts {
+            if let Some(metal) = Metal::from_name(part) {
+                assign_metal = Some(metal);
+            } else if let Ok(value) = part.parse::<f64>() {
+                if value < 0.0 {
+                    return Err(format!("Negative values are not allowed: {}", value));
+                }
+                if let Some(metal) = assign_metal {
+                    metals[metal.idx()] = value;
+                    assign_metal = None;
+                } else {
+                    // assign to next unassigned metal
+                    if let Some(next_metal) = Metal::all().iter().find(|m| metals[m.idx()] == -1.0) {
+                        metals[next_metal.idx()] = value;
+                    } else {
+                        return Err(format!("Too many values: all metals already assigned, but got extra value {}. \n Current state: {:?}", value, SolveState { metals }));
+                    }
+                }
+            } else {
+                return Err(format!("Invalid part in input: {}. The only alphabetical characters should be full metal names.", part));
+            }
+        } 
+        metals.iter().enumerate().try_for_each(|(i, &value)| {
+            if value < 0.0 {
+                Err(format!("Missing value for metal {}: no value assigned in input", Metal::from(i).name()))
+            } else {
+                Ok(())
+            }
+        })?;
         Ok(SolveState { metals })
     }
 
@@ -325,11 +403,11 @@ impl OptimalSolution {
         let mut output = String::from("");
 
         let ratio = if pretty_values {
-            format!("{} ({})", format_rounded(self.ratio, 4), self.ratio)
+            format!("\"{} ({})\"", format_rounded(self.ratio, 4), self.ratio)
         } else {
             self.ratio.to_string()
         };
-        output.push_str(&format!("{{\"ratio\":\"{}\",", ratio));
+        output.push_str(&format!("{{\"ratio\":{},", ratio));
 
         let mut metal_outputs_string = String::from("\"outputs\":");
         if use_names {metal_outputs_string.push('{');} else {metal_outputs_string.push('[');}
@@ -343,13 +421,13 @@ impl OptimalSolution {
                 metal_outputs_string.push_str("\":");
             }
             let output_value = if pretty_values {
-                decimal_to_fraction(self.outputs[metal.idx()])
+                format!("\"{}\"", decimal_to_fraction(self.outputs[metal.idx()]))
             } else {
                 self.outputs[metal.idx()].to_string()
             };
             metal_outputs_string.push_str(&output_value);
         }
-        if use_names {metal_outputs_string.push('}');} else {metal_outputs_string.push(']');}
+        if use_names {metal_outputs_string.push_str("},");} else {metal_outputs_string.push_str("],");}
         output.push_str(&metal_outputs_string);
 
         let mut transitions_string = String::from("\"transitions\":");
@@ -376,7 +454,7 @@ impl OptimalSolution {
                 }
                 if let Some(value) = self.get_transition_value(*transition, *metal) {
                     let value_string = if pretty_values {
-                        decimal_to_fraction(value)
+                        format!("\"{}\"", decimal_to_fraction(value))
                     } else {
                         value.to_string()
                     };

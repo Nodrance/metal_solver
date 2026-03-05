@@ -53,24 +53,19 @@
 
             const METAL_NAMES = JSON.parse(get_metal_names());
             const TRANSITION_NAMES = JSON.parse(get_transition_names());
-            populateTable(METAL_NAMES, TRANSITION_NAMES);
+            generateTable(METAL_NAMES, TRANSITION_NAMES);
+            let inputs = [0 * METAL_NAMES.length];
+            let targets = [0 * METAL_NAMES.length];
+            let transitions = ["false" * TRANSITION_NAMES.length];
         }
 
-        function populateTable(metalNames, transitionNames) {
+        function generateTable(metalNames, transitionNames) {
             const table = document.getElementById('the-table');
-            
-            // Clear existing content
-            table.innerHTML = '';
 
-            // Create header row with metals
             const headerRow = document.createElement('tr');
-            
-            // Empty corner cell for row labels
             const cornerCell = document.createElement('th');
             cornerCell.textContent = 'Metal';
             headerRow.appendChild(cornerCell);
-
-            // Add metal headers
             metalNames.forEach(metal => {
                 const th = document.createElement('th');
                 th.textContent = metal;
@@ -78,20 +73,13 @@
             });
             table.appendChild(headerRow);
 
-            // Define the row labels from ui.rs structure
             const rowLabels = ['Input', 'Target', 'Output', ...transitionNames];
-
-            // Create data rows
             rowLabels.forEach(label => {
                 const row = document.createElement('tr');
-                
-                // Row label cell
                 const labelCell = document.createElement('td');
                 labelCell.textContent = label;
                 labelCell.className = 'row-label';
                 row.appendChild(labelCell);
-
-                // Add cells for each metal
                 metalNames.forEach(metal => {
                     const cell = document.createElement('td');
                     cell.textContent = '0';
@@ -99,8 +87,31 @@
                     cell.dataset.field = label;
                     row.appendChild(cell);
                 });
-
                 table.appendChild(row);
+            });
+        }
+
+
+        function refreshTable(inputs, targets, transitions) {
+            let solve = JSON.parse(solve_ratio(inputs, targets, transitions));
+            let ratio = solve.ratio;
+            let outputs = solve.outputs;
+            let transitions = solve.transitions;
+            const table = document.getElementById('the-table');
+            const rows = table.querySelectorAll('tr');
+            rows.forEach((row, rowIndex) => {
+                if (rowIndex < 3) return; // Skip header and inputs
+                const cells = row.querySelectorAll('td');
+                cells.forEach((cell, cellIndex) => {
+                    if (cellIndex === 0) return; // Skip label
+                    const metal = cell.dataset.metal;
+                    const field = cell.dataset.field;
+                    if (field === 'Output') {
+                        cell.textContent = outputs[metal];
+                    } else { 
+                        cell.textContent = transitions[metal];
+                    }
+                });
             });
         }
 
