@@ -4,7 +4,7 @@
 This is Metal Rate Solver. Yes, I'm bad at naming things. It solves rate/throughput problems with metals in Opus Magnum. You give it the inputs and outputs of a puzzle, and it tells you what transmutations to do to maximize the rate. Rate means the speed at which you make outputs, regardless of how long it takes you to set up. It supports all 4 vanilla + DLC transmutations and the code can easily be modified to support modded metals or transmutations. 
 ## How do I use it?
 Just click on any of the light blue areas. The input and target rows describe how much of that atom you have as your input/output, and clicking the transmutations toggles whether each one is allowed. 
-The numbers below represent how many times to use each transmutation on each atom. For example if the number under gold and deposition is 3/2, that means that every time you take out 2 sets of gold atoms, you should use deposition on 3 single gold atoms. Ratios can be higher than 1 if you have multiple atoms in your input set.
+The numbers below represent how many times to use each transmutation on each atom. For example if the number under gold and division is 3/2, that means that every time you take out 2 sets of gold atoms, you should use division on 3 single gold atoms. Ratios can be higher than 1 if you have multiple atoms in your input set.
 The big box at the bottom tells you your final optimal ratio of input to output.
 ## How do I download it?
 Just download metal_solver.exe from the repo. I have no idea how to do releases yet but I'll probably get on that eventually. You'll need to download it, then run it. You don't need to install anything else to run it, and it won't mess with any of your Opus Magnum files or anything like that.

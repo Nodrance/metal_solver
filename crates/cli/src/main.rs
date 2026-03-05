@@ -114,7 +114,7 @@ fn print_usage(program: &str) {
     eprintln!("Usage: {program} <inputs> <outputs> <transitions>");
     eprintln!("Example (json with names and pretty values): {program} \"2 2 0 0 0 0 0\" \"0 2 0 1 0 0 0\" \"1 0 0 1\" -np");
     eprintln!("Almost any format you can imagine is supported for the inputs, outputs, and transitions");
-    eprintln!("This includes json objects with metals as keys or a list of transitions, or a simple space or comma separated list of number or true/false values");
+    eprintln!("This includes json (names or list), comma or space seperated values, and boolean-like words");
     eprintln!("Options:");
     eprintln!("  --human, -h: Human-optimized output (default is JSON)");
     eprintln!("  --use-names, -n: Use metal and transition names in JSON output instead of indices. Overriden by -h and -s");

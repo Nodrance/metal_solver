@@ -29,20 +29,20 @@ impl SolveState {
         */
         
 
-        // add all metals reachable by deposition from the highest available metal. 
+        // add all metals reachable by division from the highest available metal. 
         // If the number of available metals was higher the way we do this would be inaccurate (ie a metal of tier 8 would split into 4,4 which cannot reach 3)
         // but since the highest tier is 6->3 and holes only start at 4+ we can just assume there's no holes)
-        if transitions.get(Transition::Deposition)
+        if transitions.get(Transition::Division)
             && let Some(&max_available) = available_metals.iter().max_by_key(|m| m.idx())
             && let Some((metal1, metal2)) = max_available.get_split_metals()
         {
-            let max_deposition_product_idx = metal1.idx().max(metal2.idx());
-            for metal in Metal::from(max_deposition_product_idx).get_lower_metals() {
+            let max_division_product_idx = metal1.idx().max(metal2.idx());
+            for metal in Metal::from(max_division_product_idx).get_lower_metals() {
                 available_metals.insert(metal);
             }
         }
 
-        // purification can reach any metal as long as low enough metals exist and costs no qs, so we put it early. Deposition goes first since it has "holes" and purification fills them.
+        // purification can reach any metal as long as low enough metals exist and costs no qs, so we put it early. Division goes first since it has "holes" and purification fills them.
         if transitions.get(Transition::Purification)
             && let Some(&min_available) = available_metals.iter().min_by_key(|m| m.idx())
         {
@@ -69,8 +69,8 @@ impl SolveState {
 
         // finally, projection needs qs so we need to put the step that could create qs before it. 
         // If you work out all the other relationships, you'll find that either order doesn't matter or this order works.
-        // deposition and rejection or purification and projection can be done in any order
-        // and projection and deposition need to be in that order so projection can fill in holes in the deposition tree.
+        // division and rejection or purification and projection can be done in any order
+        // and projection and division need to be in that order so projection can fill in holes in the division tree.
         // if you add your own transitions you might need to work this out differently or put it in a loop
         if transitions.get(Transition::Projection)
             && available_metals.contains(&Metal::Quicksilver)
@@ -132,7 +132,7 @@ pub fn solve_lp(
     let p = transition_vars(Transition::Projection);
     let r = transition_vars(Transition::Rejection);
     let pu = transition_vars(Transition::Purification);
-    let d = transition_vars(Transition::Deposition);
+    let d = transition_vars(Transition::Division);
     // let a = transition_vars(Transition::Antiquation); //antiquation
 
     // p[1] is the number of times projection is used on lead (ID 1), p[2] on tin (ID 2), etc. Same for the other transitions.
@@ -169,10 +169,10 @@ pub fn solve_lp(
         pu[5].into(),
     ];
 
-    let deposition_terms: [Expression; Metal::COUNT] = [
-        0.0.into(), // quicksilver is unaffected by deposition
+    let division_terms: [Expression; Metal::COUNT] = [
+        0.0.into(), // quicksilver is unaffected by division
                         (2.0*d[2]) + d[3],
-        // here, tin is reduced by one when you deposit it, increased by one when you deposit iron, by two when copper, and one more for silver
+        // here, tin is reduced by one when you divide it, increased by one when you divide iron, by two when copper, and one more for silver
         - d[2] + d[3] + (2.0*d[4]) + d[5], 
         - d[3] + d[5] + (2.0*d[6]),
         - d[4],
@@ -204,7 +204,7 @@ pub fn solve_lp(
             + projection_terms[idx].clone() 
             + rejection_terms[idx].clone() 
             + purification_terms[idx].clone() 
-            + deposition_terms[idx].clone()
+            + division_terms[idx].clone()
             // + antiquation_terms[idx].clone() // just add the new terms in the same way as the others
         ;
         output_expressions.push(output);

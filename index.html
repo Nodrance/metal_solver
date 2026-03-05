@@ -82,7 +82,15 @@
                 row.appendChild(labelCell);
                 metalNames.forEach(metal => {
                     const cell = document.createElement('td');
-                    cell.textContent = '0';
+                    if (label === 'Input' || label === 'Target') {
+                        const input_cell = document.createElement('input');
+                        input_cell.type = 'number';
+                        input_cell.step = '1';
+                        input_cell.value = '0';
+                        cell.appendChild(input_cell);
+                    } else {
+                        cell.textContent = '0';
+                    }
                     cell.dataset.metal = metal;
                     cell.dataset.field = label;
                     row.appendChild(cell);
@@ -100,7 +108,7 @@
             const table = document.getElementById('the-table');
             const rows = table.querySelectorAll('tr');
             rows.forEach((row, rowIndex) => {
-                if (rowIndex < 3) return; // Skip header and inputs
+                if (rowIndex < 3) return; // Skip header and input/target rows
                 const cells = row.querySelectorAll('td');
                 cells.forEach((cell, cellIndex) => {
                     if (cellIndex === 0) return; // Skip label
@@ -114,7 +122,6 @@
                 });
             });
         }
-
         // Run the initialization
         run().catch((err) => {
             statusEl.textContent = "Failed to load WebAssembly";
