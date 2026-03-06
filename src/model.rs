@@ -125,12 +125,13 @@ pub enum Transition {
     Rejection = 1, // Lowers a metal and yields a QS
     Purification = 2, // Turns two metals into one of the next level
     Deposition = 3, // Splits a metal of tier N into two of tiers floor(N/2) and ceil(N/2)
+    Proliferation = 4, //Turns a QS into another metal
     // Antiquation = 4, // Example extra transition
 }
 
 impl Transition {
-    pub const COUNT: usize = 4;
-    // pub const COUNT: usize = 5; //Antiquation
+    pub const COUNT: usize = 5;
+    // pub const COUNT: usize = 6; //Antiquation
 
     pub const fn idx(self) -> usize {
         self as usize
@@ -142,6 +143,7 @@ impl Transition {
             1 => Transition::Rejection,
             2 => Transition::Purification,
             3 => Transition::Deposition,
+            4 => Transition::Proliferation,
             // 4 => Transition::Antiquation,
             _ => panic!("Invalid transition index"),
         }
@@ -153,6 +155,7 @@ impl Transition {
             Transition::Rejection,
             Transition::Purification,
             Transition::Deposition,
+            Transition::Proliferation,
             // Transition::Antiquation,
         ]
     }
@@ -163,16 +166,18 @@ impl Transition {
             Transition::Rejection => "Rejection",
             Transition::Purification => "Purification",
             Transition::Deposition => "Deposition",
+            Transition::Proliferation => "Proliferation",
             // Transition::Antiquation => "Antiquation",
         }
     }
 
     pub const fn short_name(self) -> &'static str {
         match self {
-            Transition::Projection => "Pro",
+            Transition::Projection => "Prj",
             Transition::Rejection => "Rej",
             Transition::Purification => "Pur",
             Transition::Deposition => "Dep",
+            Transition::Proliferation => "Plf",
             // Transition::Antiquation => "Ant",
         }
     }
@@ -184,6 +189,7 @@ impl Transition {
             Transition::Rejection => [false, false, true, true, true, true, true], //You can reject anything tin or above other than QS
             Transition::Purification => [false, true, true, true, true, true, false], //You can purify anything tin or above other than QS and Gold
             Transition::Deposition => [false, false, true, true, true, true, true], //You can deposit anything tin or above other than QS
+            Transition::Proliferation => [false, true, true, true, true, true, true], //You can proliferate QS into anything other than QS
             // Transition::Antiquation => [true, true, true, true, true, true, true], //Example transition that can be applied to any metal
         }
     }
@@ -373,27 +379,37 @@ pub fn format_rounded(value: f64, max_digits: usize) -> String {
     format!("{:.1$}", value, decimals_to_show)
 }
 
+// adapted from https://ics.uci.edu/~eppstein/numth/frap.c
 pub fn decimal_to_fraction(value: f64) -> String {
-    let tolerance = 1e-6;
-    let mut numerator = 1;
-    let mut denominator = 1;
-    if (value.round() - value).abs() < tolerance {
-        return format_rounded(value, 0)
+
+    let tolerance = 1e-8;
+    let maxden: i64 = 10000;
+
+    let mut x = value;
+    let mut a: i64 = 0;
+    let mut b: i64 = 1;
+    let mut c: i64 = 1;
+    let mut d: i64 = 0;
+    let mut t: i64;
+    let mut ai: i64;
+
+    while (c * (x as i64) + d) <= maxden {
+        ai = x as i64;
+        t = a * ai + b;
+        b = a;
+        a = t;
+        t = c * ai + d;
+        d = c;
+        c = t;
+        if (x - (ai as f64)).abs() < tolerance {
+            break;
+        }
+        x = 1.0/(x - (ai as f64));
     }
 
-    while (numerator as f64 / denominator as f64 - value).abs() > tolerance {
-        if numerator > 1000 || denominator > 1000 {
-            return format_rounded(value, 5);
-        }
-        if (numerator as f64) / (denominator as f64) < value {
-            numerator += 1;
-        } else {
-            denominator += 1;
-        }
-    }
-    if denominator == 1 {
-        format!("{}", numerator)
+    if a == 1 {
+        format!("{}", c)
     } else {
-        format!("{}/{}", numerator, denominator)
+        format!("{}/{}", c, a)
     }
 }
