@@ -1,7 +1,7 @@
 # Metal Solver
 ![Screenshot](screenshot.png)
 ## What is this?
-This is Metal Rate Solver. Yes, I'm bad at naming things. It solves rate/throughput problems with metals in Opus Magnum. You give it the inputs and outputs of a puzzle, and it tells you what transmutations to do to maximize the rate. Rate means the speed at which you make outputs, regardless of how long it takes you to set up. It supports all 4 vanilla + DLC transmutations and the code can easily be modified to support modded metals or transmutations. 
+This is Metal Rate Solver. Yes, I'm bad at naming things. It solves rate/throughput problems with metals in Opus Magnum. You give it the inputs and outputs of a puzzle, and it tells you what transmutations to do to maximize the rate. Rate means the speed at which you make outputs, regardless of how long it takes you to set up. It supports all 5 vanilla + DLC transmutations and the code can easily be modified to support modded metals or transmutations. 
 ## How do I use it?
 Just click on any of the light blue areas. The input and target rows describe how much of that atom you have as your input/output, and clicking the transmutations toggles whether each one is allowed. 
 The numbers below represent how many times to use each transmutation on each atom. For example if the number under gold and division is 3/2, that means that every time you take out 2 sets of gold atoms, you should use division on 3 single gold atoms. Ratios can be higher than 1 if you have multiple atoms in your input set.
@@ -14,8 +14,16 @@ If you see a popup saying "Windows protected your PC" or something like that, it
 Step 1: Install Rust and Cargo from https://www.rust-lang.org/tools/install
 Step 2: Download the source code and unzip it into a folder
 Step 3: Right click the folder, and click "Open in Terminal"
-Step 4: Run `cargo build --release` to compile it
+Step 4: Run `cargo build --release -p metal_solver_ui` to compile it
 Step 5: Look in the `target/release` folder for the executable file, which should be called `metal_solver.exe`. You can move that wherever you want and run it without needing Rust or Cargo anymore.
+
+### Alternate: WASM version
+Step 1-3: see above 
+Step 4: `cargo install wasm-binder`
+Step 5: `wasm-pack build --target web crates/wasm`
+Step 6: Copy crates/wasm/pkg/metal_solver_wasm_bg.wasm and metal_solver_wasm.js into src/web
+Step 7: Use a live server plugin to host index.html, or upload both index.html to a server. This will be a portable web version that can be hosted on a server 
+
 ## How do I add my own transmutations or metals?
 Adding transmutations is designed to be as easy as possible. Just add a new entry to the `Transformation` enum, then add it to all the lists below for things like the name. Don't forget to increase Transformation::COUNT by 1 as well.
 Then, in solver.rs, you'll need to define how the transmutation affects each metal. You can look at the existing transmutations for examples of how to do this. 
